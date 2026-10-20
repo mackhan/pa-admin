@@ -13,6 +13,11 @@ const events = [
   ev("c", { ts: T0 - 20 * 86400, os: "windows" }), ev("d", { ts: T0 - 40 * 86400 }),
   ev("a", { kind: "panel_open" }), ev("x", { app: "KVMini" }), ev("t", { kind: "setup_test" }),
   ev("e", { ts: T0 - 3600 * 13, app_version: "0.10.0" }),           // 跨北京时间零点
+  // 功能使用：次数 + 用过几台设备（同一台机器只算一次）
+  ev("a", { kind: "feature_used", props: { name: "search" } }),
+  ev("b", { kind: "feature_used", props: { name: "search" } }),
+  ev("a", { kind: "feature_used", props: { name: "export" } }),
+  ev("a", { kind: "feature_used", props: { name: "export" } }),
 ];
 fs.mkdirSync(path.join(dir, "PromptLedger"));
 fs.mkdirSync(path.join(dir, "KVMini"));

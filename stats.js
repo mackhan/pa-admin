@@ -50,13 +50,19 @@
     var byApp = {};
     events.forEach(function (e) { (byApp[e.app] = byApp[e.app] || []).push(e); });
     var apps = Object.keys(byApp).map(function (name) {
-      var es = byApp[name], lastSeen = {}, latest = {}, perDay = {}, kinds = {};
+      var es = byApp[name], lastSeen = {}, latest = {}, perDay = {}, kinds = {}, feats = {}, seenFeat = {};
       es.forEach(function (e) {
         var iid = e.install_id, ts = Number(e.ts), d = dayOf(ts);
         if (!lastSeen[iid] || d > lastSeen[iid]) lastSeen[iid] = d;
         if (!latest[iid] || ts >= latest[iid][0]) latest[iid] = [ts, String(e.app_version), String(e.os)];
         (perDay[d] = perDay[d] || {})[iid] = 1;
         kinds[e.kind] = (kinds[e.kind] || 0) + 1;
+        // 功能使用：次数 + 用过的人（同一台机器只算一次）
+        if (e.kind === "feature_used" && e.props && e.props.name) {
+          var n = String(e.props.name);
+          feats[n] = (feats[n] || 0) + 1;
+          (seenFeat[n] = seenFeat[n] || {})[iid] = 1;
+        }
       });
       function active(n) {
         var start = addDays(today, -(n - 1));
@@ -76,6 +82,8 @@
         name: name, devices: Object.keys(lastSeen).length, active7: active(7), active30: active(30), events: es.length,
         versions: ranked(versions).sort(function (a, b) { return b[1] - a[1] || cmpVer(a[0], b[0]); }),
         os: ranked(oses), kinds: ranked(kinds), daily: daily,
+        // 每项：[功能名, 次数, 用过几台设备]
+        features: ranked(feats).map(function (r) { return [r[0], r[1], seenFeat[r[0]] ? Object.keys(seenFeat[r[0]]).length : 0]; }),
       };
     });
     apps.sort(function (a, b) { return b.devices - a.devices || (a.name < b.name ? -1 : 1); });

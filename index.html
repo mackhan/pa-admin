@@ -208,6 +208,13 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
         '%"></i></span><span class="n">' + r[1] + "</span></li>";
     }).join("") + "</ul>";
   }
+  // 功能使用：[名字, 次数, 设备数]
+  function featRows(fs) {
+    return '<ul class="bars">' + fs.map(function (f) {
+      return '<li><span class="k">' + esc(f[0]) + '</span><span class="bar"><i style="width:' +
+        (fs[0][1] ? 100 * f[1] / fs[0][1] : 0).toFixed(1) + '%"></i></span><span class="n">' + f[1] + " / " + f[2] + "</span></li>";
+    }).join("") + "</ul>";
+  }
   function renderStats(agg) {
     $("asof").textContent = "数据截至 " + agg.generated + "（北京时间）· 每次打开实时从数据仓计算 · 只显示聚合数字";
     if (!agg.apps.length) { $("apps").innerHTML = '<div class="card empty">还没有数据。应用启动后一分钟内会上报第一条。</div>'; return; }
@@ -220,7 +227,10 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
           return '<i style="height:' + (d[1] ? Math.max(4, 100 * d[1] / peak) : 0) + '%" title="' + d[0] + " · " + d[1] + '"></i>';
         }).join("") + "</div>" +
         '<div class="cols"><div><h4>版本</h4>' + bars(a.versions, a.devices) + "</div><div><h4>系统</h4>" + bars(a.os, a.devices) +
-        "</div><div><h4>事件类型</h4>" + bars(a.kinds, a.events) + "</div></div></div>";
+        "</div><div><h4>事件类型</h4>" + bars(a.kinds, a.events) + "</div></div>" +
+        (a.features && a.features.length
+          ? '<h4>功能使用 · 次数 / 设备数</h4>' + featRows(a.features)
+          : "") + "</div>";
     }).join("");
   }
 
