@@ -7,23 +7,27 @@
 <title>Atelier raIn · 管理后台</title>
 <style>
 :root { --bg: #0b0b0c; --fg: #f0f0f0; --muted: #8a8a8f; --dim: #5c5c62; --line: #232327; --card: #131316; --accent: #ff9f43;
-  --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  --ok: #4ade80; --bad: #ff7b6b; --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--fg); font: 14px/1.6 -apple-system, system-ui, "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; }
 .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 80px; }
-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; gap: 12px; flex-wrap: wrap; }
 .logo { font: 600 13px var(--mono); letter-spacing: .1em; color: #cfcfd4; }
 .logo small { color: var(--dim); margin-left: 8px; letter-spacing: 0; }
-nav button { background: none; border: 1px solid var(--line); color: var(--muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-left: 6px; }
+nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+nav button { background: none; border: 1px solid var(--line); color: var(--muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; }
 nav button.on, nav button:hover { color: var(--fg); border-color: #3f3f47; }
+nav button.pill { font: 12px var(--mono); color: #b9b9c0; }
 h1 { font-size: 26px; font-weight: 600; margin-bottom: 4px; }
 .lead { color: var(--muted); margin-bottom: 22px; }
+.lead code { font: 12.5px var(--mono); color: #cfcfd4; background: rgba(255,255,255,.05); padding: 1px 5px; border-radius: 5px; }
 .card { border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.012)); margin-bottom: 14px; }
 .login input { width: 100%; background: #0f0f12; border: 1px solid var(--line); color: var(--fg); border-radius: 10px; padding: 10px 12px; font: 13px var(--mono); margin: 8px 0; }
 .btn { background: var(--fg); color: #111; border: 0; padding: 9px 16px; border-radius: 10px; font-weight: 600; cursor: pointer; }
 .btn.ghost { background: none; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
 .hint { color: var(--dim); font-size: 12.5px; }
-.err { color: #ff7b6b; margin-top: 8px; }
+.err { color: var(--bad); margin-top: 8px; }
 .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 4px; }
 .nums div { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.02); }
 .nums b { display: block; font: 600 26px/1.1 var(--mono); }
@@ -47,6 +51,12 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
 .row { display: flex; gap: 8px; margin-top: 12px; }
 .row input { flex: 1; background: #0f0f12; border: 1px solid var(--line); color: var(--fg); border-radius: 10px; padding: 8px 10px; }
 .empty { color: var(--dim); padding: 30px 0; text-align: center; }
+#diag { margin-top: 14px; display: none; border-top: 1px dashed var(--line); padding-top: 12px; }
+#diag li { list-style: none; font: 12.5px/1.9 var(--mono); color: var(--muted); }
+#diag li b { display: inline-block; width: 18px; }
+#diag li .ok { color: var(--ok); }
+#diag li .bad { color: var(--bad); }
+#diag li .fix { color: #ffd7a8; }
 @media (max-width: 760px) { .nums { grid-template-columns: repeat(2, 1fr); } .cols { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -54,18 +64,19 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
 <div class="wrap">
   <header>
     <div class="logo">Atelier raIn<small>管理后台</small></div>
-    <nav id="nav" hidden><button data-v="stats" class="on">使用统计</button><button data-v="access">权限管理</button><button id="logout">退出</button></nav>
+    <nav id="nav" hidden><button data-v="stats" class="on">使用统计</button><button data-v="access">权限管理</button><button id="tokbtn" class="pill" title="点击复制令牌"></button><button id="logout">退出</button></nav>
   </header>
 
   <section id="login" class="card login">
     <h1>管理员登录</h1>
     <p class="lead">本页不保存任何数据：登录后浏览器直接用你的 GitHub 令牌读私有数据仓 <code id="repo-name"></code>，在本机统计。
       没有该仓库权限的人打开这个地址什么也看不到。</p>
-    <input id="token" type="password" placeholder="GitHub 令牌（ghp_… 或 github_pat_…）" autocomplete="off">
-    <p class="hint">建议用 Fine-grained token：Repository access 只选 pa-stats，Permissions → Contents 选 Read-only（要管理权限再加 Administration: Read and write）。
-      令牌只存在这台电脑的浏览器里（localStorage），点「退出」即清除。</p>
-    <div class="row"><button class="btn" id="go">登录</button></div>
+    <input id="token" type="password" placeholder="GitHub 令牌（github_pat_… 或 ghp_…）" autocomplete="off">
+    <p class="hint">令牌要求：Repository access 勾 <b>Only select repositories → mackhan/pa-stats</b>；Permissions → <b>Contents: Read-only</b>（要在「权限管理」里加人，再加 <b>Administration: Read and write</b>）。
+      令牌只存在这台电脑的浏览器里（localStorage），登录后右上角可随时复制出来另存，点「退出」即清除。</p>
+    <div class="row"><button class="btn" id="go">登录并检查权限</button></div>
     <p class="err" id="err"></p>
+    <ul id="diag"></ul>
   </section>
 
   <section id="v-stats" hidden>
@@ -104,7 +115,75 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
       return opt.raw ? r.text() : r.json();
     });
   }
+  // 只探测、不抛错：返回 {status, json, scopes}
+  function probe(path) {
+    return fetch(API + path, { headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var j = null; try { j = JSON.parse(t); } catch (e) {}
+          return { status: r.status, json: j, scopes: r.headers.get("x-oauth-scopes") || "", msg: (j && j.message) || "" };
+        });
+      })
+      .catch(function (e) { return { status: 0, json: null, scopes: "", msg: String((e && e.message) || e) }; });
+  }
   var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var mask = function (t) { return t.length > 14 ? t.slice(0, 11) + "…" + t.slice(-4) : t.slice(0, 3) + "…"; };
+
+  function drawDiag(items) {
+    var box = $("diag");
+    box.style.display = "block";
+    box.innerHTML = items.map(function (x) {
+      var mark = x.ok === true ? '<b class="ok">✓</b>' : x.ok === false ? '<b class="bad">✗</b>' : '<b>·</b>';
+      return "<li>" + mark + esc(x.text) + (x.fix ? '<br><span class="fix">　 → ' + esc(x.fix) + "</span>" : "") + "</li>";
+    }).join("");
+  }
+
+  // 登录前自检：令牌有效？能看到仓库？能读数据？能管人？
+  function diagnose() {
+    var steps = [];
+    var kind = /^github_pat_/.test(token) ? "fine-grained" : /^(ghp|gho|ghu|ghs)_/.test(token) ? "classic/OAuth" : "未知格式";
+    steps.push({ ok: /^(github_pat_|ghp_|gho_|ghu_|ghs_)/.test(token), text: "令牌格式：" + kind + "（" + mask(token) + "）",
+      fix: /^(github_pat_|ghp_|gho_|ghu_|ghs_)/.test(token) ? "" : "令牌应以 github_pat_ 或 ghp_ 开头，可能是粘贴不完整" });
+
+    return probe("/user").then(function (u) {
+      if (u.status === 0) {
+        steps.push({ ok: false, text: "连不上 api.github.com（" + u.msg + "）", fix: "检查网络/代理；GitHub 在国内需要能访问 api.github.com 才能用这个后台" });
+        return { steps: steps, ok: false };
+      }
+      var good = u.status === 200;
+      steps.push({ ok: good, text: good ? "令牌有效，GitHub 账号 @" + u.json.login : "令牌无效或被吊销（HTTP " + u.status + (u.msg ? " · " + u.msg : "") + "）",
+        fix: good ? (u.scopes ? "经典令牌已授权的 scope：" + (u.scopes || "（无）") : "Fine-grained 令牌（不带 scope 列表，权限按仓库逐个勾）") : "重新生成一个新令牌" });
+      if (!good) return { steps: steps, ok: false };
+
+      return probe("/repos/" + REPO).then(function (r) {
+        var canSee = r.status === 200;
+        steps.push({ ok: canSee, text: canSee ? "能看到仓库 " + REPO + "（私有：" + (r.json.private ? "是" : "否") + "）"
+            : "看不到仓库 " + REPO + "（HTTP " + r.status + "）",
+          fix: canSee ? "" : "Fine-grained 令牌要在 Repository access 里勾 Only select repositories → " + REPO + "；经典令牌要有 repo scope" });
+        if (!canSee) return { steps: steps, ok: false };
+
+        var p = r.json.permissions || {};
+        return probe("/repos/" + REPO + "/contents/data").then(function (c) {
+          var readOk = c.status === 200, noDir = c.status === 404;
+          steps.push({ ok: readOk || noDir,
+            text: readOk ? "能读数据目录 data/（" + (Array.isArray(c.json) ? c.json.length : 0) + " 个应用）"
+                : noDir ? "能看到仓库，但 data/ 目录还不存在（还没上报过数据，正常）"
+                : c.status === 0 ? "请求 data/ 失败（" + c.msg + "）"
+                : "读不到 data/（HTTP " + c.status + (c.msg ? " · " + c.msg : "") + "）",
+            fix: (readOk || noDir) ? "" : "Permissions → Contents 设成 Read-only（改完要重新生成/保存令牌，旧令牌不会自动升级）" });
+          if (!(readOk || noDir)) return { steps: steps, ok: false };
+
+          return probe("/repos/" + REPO + "/collaborators?per_page=100").then(function (a) {
+            var adminOk = a.status === 200;
+            steps.push({ ok: adminOk ? true : null,
+              text: adminOk ? "可管理协作者（" + (Array.isArray(a.json) ? a.json.length : 0) + " 人）" : "不能管理协作者（HTTP " + a.status + "）——只影响「权限管理」页",
+              fix: adminOk ? "" : "要加人就把 Administration 设为 Read and write；只看统计可以不管" });
+            return { steps: steps, ok: true, admin: adminOk, perms: p };
+          });
+        });
+      });
+    });
+  }
 
   function loadEvents() {
     return gh("/repos/" + REPO + "/contents/data").catch(function (e) { if (e.status === 404) return []; throw e; }).then(function (apps) {
@@ -150,7 +229,7 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
     gh("/repos/" + REPO + "/collaborators?per_page=100").then(function (ps) {
       $("people").innerHTML = ps.map(function (p) {
         var role = p.permissions && p.permissions.admin ? "管理员" : p.permissions && p.permissions.push ? "可写" : "只读";
-        return "<tr><td>" + esc(p.login) + "</td><td>" + role + '</td><td>' + (role === "管理员" ? "" :
+        return "<tr><td>" + esc(p.login) + "</td><td>" + role + "</td><td>" + (role === "管理员" ? "" :
           '<button class="btn ghost" data-rm="' + esc(p.login) + '">移除</button>') + "</td></tr>";
       }).join("");
     }).catch(function (e) { $("aerr").textContent = e.status === 403 ? "令牌没有 Administration 权限，只能看统计。" : e.message; });
@@ -175,20 +254,36 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
   }
   $("nav").onclick = function (e) { if (e.target.dataset.v) show(e.target.dataset.v); };
   $("logout").onclick = function () { localStorage.removeItem("pa-admin-token"); location.reload(); };
+  $("tokbtn").onclick = function () {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(token).then(function () {
+      $("tokbtn").textContent = "已复制 ✓";
+      setTimeout(function () { $("tokbtn").textContent = mask(token); }, 1400);
+    });
+  };
 
   function enter() {
     $("err").textContent = "";
-    $("go").textContent = "读取中…";
-    loadEvents().then(function (es) {
-      localStorage.setItem("pa-admin-token", token);
-      $("login").hidden = true;
-      $("nav").hidden = false;
-      renderStats(Stats.aggregate(es));
-      show("stats");
+    $("go").textContent = "检查中…";
+    $("diag").style.display = "none";
+    diagnose().then(function (d) {
+      drawDiag(d.steps);
+      if (!d.ok) { $("go").textContent = "登录并检查权限"; return; }
+      return loadEvents().then(function (es) {
+        localStorage.setItem("pa-admin-token", token);
+        $("login").hidden = true;
+        $("nav").hidden = false;
+        $("tokbtn").textContent = mask(token);
+        renderStats(Stats.aggregate(es));
+        show("stats");
+      }).catch(function (e) {
+        $("go").textContent = "登录并检查权限";
+        $("err").textContent = "读数据失败：" + e.message;
+        localStorage.removeItem("pa-admin-token");
+      });
     }).catch(function (e) {
-      $("go").textContent = "登录";
-      $("err").textContent = e.status === 401 ? "令牌无效或已过期" : e.status === 404 || e.status === 403 ? "这个令牌没有读取 " + REPO + " 的权限" : e.message;
-      localStorage.removeItem("pa-admin-token");
+      $("go").textContent = "登录并检查权限";
+      $("err").textContent = "检查中止：" + ((e && e.message) || e);
     });
   }
   $("go").onclick = function () { token = $("token").value.trim(); if (token) enter(); };
