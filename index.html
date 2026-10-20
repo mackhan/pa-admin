@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Atelier raIn · 管理后台</title>
+<style>
+:root { --bg: #0b0b0c; --fg: #f0f0f0; --muted: #8a8a8f; --dim: #5c5c62; --line: #232327; --card: #131316; --accent: #ff9f43;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.6 -apple-system, system-ui, "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 80px; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+.logo { font: 600 13px var(--mono); letter-spacing: .1em; color: #cfcfd4; }
+.logo small { color: var(--dim); margin-left: 8px; letter-spacing: 0; }
+nav button { background: none; border: 1px solid var(--line); color: var(--muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; margin-left: 6px; }
+nav button.on, nav button:hover { color: var(--fg); border-color: #3f3f47; }
+h1 { font-size: 26px; font-weight: 600; margin-bottom: 4px; }
+.lead { color: var(--muted); margin-bottom: 22px; }
+.card { border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.012)); margin-bottom: 14px; }
+.login input { width: 100%; background: #0f0f12; border: 1px solid var(--line); color: var(--fg); border-radius: 10px; padding: 10px 12px; font: 13px var(--mono); margin: 8px 0; }
+.btn { background: var(--fg); color: #111; border: 0; padding: 9px 16px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+.btn.ghost { background: none; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+.hint { color: var(--dim); font-size: 12.5px; }
+.err { color: #ff7b6b; margin-top: 8px; }
+.nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 4px; }
+.nums div { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.02); }
+.nums b { display: block; font: 600 26px/1.1 var(--mono); }
+.nums span { font-size: 12px; color: var(--dim); }
+h3 { font-size: 17px; display: flex; align-items: center; gap: 10px; }
+h3 i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+h4 { font: 500 11px var(--mono); letter-spacing: .14em; color: var(--dim); text-transform: uppercase; margin: 20px 0 10px; }
+.chart { display: flex; align-items: flex-end; gap: 3px; height: 90px; border-bottom: 1px solid var(--line); }
+.chart i { flex: 1; min-width: 2px; border-radius: 3px 3px 0 0; background: var(--accent); opacity: .78; }
+.chart i:hover { opacity: 1; }
+.cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.bars { list-style: none; display: grid; gap: 7px; }
+.bars li { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: 10px; font-size: 13px; }
+.bars .k { font-family: var(--mono); color: #cfcfd4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bars .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bars .bar i { display: block; height: 100%; background: var(--accent); }
+.bars .n { font-family: var(--mono); color: var(--muted); text-align: right; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+th { color: var(--dim); font-weight: 500; font-size: 12px; }
+.row { display: flex; gap: 8px; margin-top: 12px; }
+.row input { flex: 1; background: #0f0f12; border: 1px solid var(--line); color: var(--fg); border-radius: 10px; padding: 8px 10px; }
+.empty { color: var(--dim); padding: 30px 0; text-align: center; }
+@media (max-width: 760px) { .nums { grid-template-columns: repeat(2, 1fr); } .cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">Atelier raIn<small>管理后台</small></div>
+    <nav id="nav" hidden><button data-v="stats" class="on">使用统计</button><button data-v="access">权限管理</button><button id="logout">退出</button></nav>
+  </header>
+
+  <section id="login" class="card login">
+    <h1>管理员登录</h1>
+    <p class="lead">本页不保存任何数据：登录后浏览器直接用你的 GitHub 令牌读私有数据仓 <code id="repo-name"></code>，在本机统计。
+      没有该仓库权限的人打开这个地址什么也看不到。</p>
+    <input id="token" type="password" placeholder="GitHub 令牌（ghp_… 或 github_pat_…）" autocomplete="off">
+    <p class="hint">建议用 Fine-grained token：Repository access 只选 pa-stats，Permissions → Contents 选 Read-only（要管理权限再加 Administration: Read and write）。
+      令牌只存在这台电脑的浏览器里（localStorage），点「退出」即清除。</p>
+    <div class="row"><button class="btn" id="go">登录</button></div>
+    <p class="err" id="err"></p>
+  </section>
+
+  <section id="v-stats" hidden>
+    <h1>使用统计</h1>
+    <p class="lead" id="asof"></p>
+    <div id="apps"></div>
+  </section>
+
+  <section id="v-access" hidden>
+    <h1>权限管理</h1>
+    <p class="lead">谁能看本后台 = 谁对私有数据仓有读权限。这里直接管理该仓库的协作者（需要令牌有 Administration 权限）。</p>
+    <div class="card"><table><thead><tr><th>GitHub 账号</th><th>权限</th><th></th></tr></thead><tbody id="people"></tbody></table>
+      <div class="row"><input id="new-user" placeholder="要授权的 GitHub 用户名"><button class="btn" id="add">授予只读权限</button></div>
+      <p class="err" id="aerr"></p></div>
+  </section>
+</div>
+<script src="stats.js"></script>
+<script>
+(function () {
+  "use strict";
+  var REPO = "mackhan/pa-stats", API = "https://api.github.com";
+  var $ = function (id) { return document.getElementById(id); };
+  $("repo-name").textContent = REPO;
+  var token = localStorage.getItem("pa-admin-token") || "";
+
+  function gh(path, opt) {
+    opt = opt || {};
+    return fetch(API + path, {
+      method: opt.method || "GET",
+      headers: Object.assign({ Authorization: "Bearer " + token, Accept: opt.raw ? "application/vnd.github.raw" : "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28" }, opt.body ? { "Content-Type": "application/json" } : {}),
+      body: opt.body ? JSON.stringify(opt.body) : undefined,
+    }).then(function (r) {
+      if (r.status === 204) return null;
+      if (!r.ok) return r.text().then(function (t) { var e = new Error(r.status + " " + t.slice(0, 160)); e.status = r.status; throw e; });
+      return opt.raw ? r.text() : r.json();
+    });
+  }
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+
+  function loadEvents() {
+    return gh("/repos/" + REPO + "/contents/data").catch(function (e) { if (e.status === 404) return []; throw e; }).then(function (apps) {
+      var dirs = apps.filter(function (x) { return x.type === "dir"; });
+      return Promise.all(dirs.map(function (d) {
+        return gh("/repos/" + REPO + "/contents/data/" + encodeURIComponent(d.name)).then(function (files) {
+          return Promise.all(files.filter(function (f) { return /\.jsonl$/.test(f.name); }).map(function (f) {
+            return gh("/repos/" + REPO + "/contents/" + f.path.split("/").map(encodeURIComponent).join("/"), { raw: true });
+          }));
+        });
+      })).then(function (texts) {
+        var all = [];
+        texts.forEach(function (t) { t.forEach(function (x) { all = all.concat(Stats.parseLines(x)); }); });
+        return all;
+      });
+    });
+  }
+
+  function bars(rows, total) {
+    return '<ul class="bars">' + rows.map(function (r) {
+      return '<li><span class="k">' + esc(r[0]) + '</span><span class="bar"><i style="width:' + (total ? 100 * r[1] / total : 0).toFixed(1) +
+        '%"></i></span><span class="n">' + r[1] + "</span></li>";
+    }).join("") + "</ul>";
+  }
+  function renderStats(agg) {
+    $("asof").textContent = "数据截至 " + agg.generated + "（北京时间）· 每次打开实时从数据仓计算 · 只显示聚合数字";
+    if (!agg.apps.length) { $("apps").innerHTML = '<div class="card empty">还没有数据。应用启动后一分钟内会上报第一条。</div>'; return; }
+    $("apps").innerHTML = agg.apps.map(function (a) {
+      var peak = Math.max.apply(null, a.daily.map(function (d) { return d[1]; }).concat([1]));
+      return '<div class="card"><h3><i></i>' + esc(a.name) + "</h3>" +
+        '<div class="nums"><div><b>' + a.devices + "</b><span>累计设备</span></div><div><b>" + a.active7 + "</b><span>7 日活跃</span></div><div><b>" +
+        a.active30 + "</b><span>30 日活跃</span></div><div><b>" + a.events + "</b><span>事件</span></div></div>" +
+        "<h4>近 " + agg.days + ' 天每日活跃设备</h4><div class="chart">' + a.daily.map(function (d) {
+          return '<i style="height:' + (d[1] ? Math.max(4, 100 * d[1] / peak) : 0) + '%" title="' + d[0] + " · " + d[1] + '"></i>';
+        }).join("") + "</div>" +
+        '<div class="cols"><div><h4>版本</h4>' + bars(a.versions, a.devices) + "</div><div><h4>系统</h4>" + bars(a.os, a.devices) +
+        "</div><div><h4>事件类型</h4>" + bars(a.kinds, a.events) + "</div></div></div>";
+    }).join("");
+  }
+
+  function loadPeople() {
+    $("aerr").textContent = "";
+    gh("/repos/" + REPO + "/collaborators?per_page=100").then(function (ps) {
+      $("people").innerHTML = ps.map(function (p) {
+        var role = p.permissions && p.permissions.admin ? "管理员" : p.permissions && p.permissions.push ? "可写" : "只读";
+        return "<tr><td>" + esc(p.login) + "</td><td>" + role + '</td><td>' + (role === "管理员" ? "" :
+          '<button class="btn ghost" data-rm="' + esc(p.login) + '">移除</button>') + "</td></tr>";
+      }).join("");
+    }).catch(function (e) { $("aerr").textContent = e.status === 403 ? "令牌没有 Administration 权限，只能看统计。" : e.message; });
+  }
+  $("add").onclick = function () {
+    var u = $("new-user").value.trim();
+    if (!/^[A-Za-z0-9-]{1,39}$/.test(u)) { $("aerr").textContent = "用户名格式不对"; return; }
+    gh("/repos/" + REPO + "/collaborators/" + u, { method: "PUT", body: { permission: "pull" } })
+      .then(function () { $("new-user").value = ""; $("aerr").textContent = "已发出邀请，对方在 GitHub 接受后生效。"; loadPeople(); })
+      .catch(function (e) { $("aerr").textContent = e.message; });
+  };
+  $("people").onclick = function (e) {
+    var u = e.target.dataset && e.target.dataset.rm;
+    if (!u || !confirm("移除 " + u + " 的访问权限？")) return;
+    gh("/repos/" + REPO + "/collaborators/" + u, { method: "DELETE" }).then(loadPeople).catch(function (x) { $("aerr").textContent = x.message; });
+  };
+
+  function show(v) {
+    ["stats", "access"].forEach(function (k) { $("v-" + k).hidden = k !== v; });
+    Array.prototype.forEach.call(document.querySelectorAll("#nav [data-v]"), function (b) { b.classList.toggle("on", b.dataset.v === v); });
+    if (v === "access") loadPeople();
+  }
+  $("nav").onclick = function (e) { if (e.target.dataset.v) show(e.target.dataset.v); };
+  $("logout").onclick = function () { localStorage.removeItem("pa-admin-token"); location.reload(); };
+
+  function enter() {
+    $("err").textContent = "";
+    $("go").textContent = "读取中…";
+    loadEvents().then(function (es) {
+      localStorage.setItem("pa-admin-token", token);
+      $("login").hidden = true;
+      $("nav").hidden = false;
+      renderStats(Stats.aggregate(es));
+      show("stats");
+    }).catch(function (e) {
+      $("go").textContent = "登录";
+      $("err").textContent = e.status === 401 ? "令牌无效或已过期" : e.status === 404 || e.status === 403 ? "这个令牌没有读取 " + REPO + " 的权限" : e.message;
+      localStorage.removeItem("pa-admin-token");
+    });
+  }
+  $("go").onclick = function () { token = $("token").value.trim(); if (token) enter(); };
+  $("token").onkeydown = function (e) { if (e.key === "Enter") $("go").onclick(); };
+  if (token) enter();
+})();
+</script>
+</body>
+</html>
