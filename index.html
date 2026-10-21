@@ -67,7 +67,17 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
 #diag li .ok { color: var(--ok); }
 #diag li .bad { color: var(--bad); }
 #diag li .fix { color: #ffd7a8; }
-@media (max-width: 760px) { .nums { grid-template-columns: repeat(2, 1fr); } .cols { grid-template-columns: 1fr; } }
+/* 窄屏：条形图改两行——名称+说明一行，比例条整行，数字靠右 */
+@media (max-width: 760px) {
+  .nums { grid-template-columns: repeat(2, 1fr); }
+  .cols { grid-template-columns: 1fr; }
+  .bars li { grid-template-columns: 1fr 44px; grid-template-areas: "k n" "bar bar"; row-gap: 4px; }
+  .bars .k { grid-area: k; }
+  .bars .bar { grid-area: bar; }
+  .bars .n { grid-area: n; }
+  .bars .k b { white-space: normal; }
+  .chart { height: 64px; }
+}
 </style>
 </head>
 <body>
