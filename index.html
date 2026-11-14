@@ -129,11 +129,12 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
       <div class="row"><input id="p-en" placeholder="公告（English）"></div>
       <div class="row"><button class="btn" id="p-save">保存并发布</button><span id="p-msg"></span></div>
       <p class="err" id="perr"></p>
-      <p class="hint">保存需要令牌同时勾上 <b>mackhan/mackhan.github.io</b> 的 <b>Contents: Read and write</b>；只有 pa-stats 只读权限时会报 403。发布结果可打开 <a href="/policy.json" target="_blank" rel="noopener">/policy.json</a> 核对。</p>
+      <p class="hint">保存需要令牌同时勾上 <b>mackhan/mackhan.github.io</b> 的 <b>Contents: Read and write</b>；只有 pa-stats 只读权限时会报 403。发布结果可打开 <a id="policy-link" href="https://mackhan.github.io/policy/kvmini.json" target="_blank" rel="noopener">该产品的策略文件</a> 核对。</p>
     </div>
   </section>
 </div>
 <script src="stats.js"></script>
+<script src="policy-doc.js"></script>
 <script src="labels.js"></script>
 <script>
 (function () {
@@ -146,7 +147,7 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
     { id: "promptledger", name: "PromptLedger 提示词账本" }
   ];
   var POLICY_PATH = function (id) { return "content/static/policy/" + id + ".json"; };
-  var currentProduct = "kvmini", currentApp = null, policySha = null, lastEvents = [];
+  var currentProduct = "kvmini", currentApp = null, policySha = null, currentDoc = null, lastEvents = [];
   var $ = function (id) { return document.getElementById(id); };
   $("repo-name").textContent = REPO;
   var token = localStorage.getItem("pa-admin-token") || "";
@@ -381,8 +382,13 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
       pricing: { mode: "free", notice: { zh: "", en: "" }, effectiveFrom: "" },
     };
   }
+  function syncPolicyLink() {
+    $("policy-link").href = "https://mackhan.github.io/policy/" + currentProduct + ".json";
+  }
+
   function renderProductSelect() {
     var sel = $("p-product");
+    syncPolicyLink();
     if (sel.options.length) return;
     PRODUCTS.forEach(function (p) {
       var o = document.createElement("option");
@@ -394,6 +400,8 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
   $("p-product").onchange = function () {
     currentProduct = this.value;
     policySha = null;
+    currentDoc = null;
+    syncPolicyLink();
     loadPolicy();
   };
 
@@ -410,14 +418,18 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
           }).join(" · ") + "</p>" : "");
       })
       .catch(function (e) {
-        box.textContent = "读不到仓库流量（" + e.message + "）：需要令牌有 " + SITE_REPO + " 的读权限。";
+        box.textContent = "读不到仓库流量（" + e.message + "）：GitHub Traffic API 需要令牌对 " + SITE_REPO + " 有 push（写）权限，只读令牌不够。";
       });
   }
 
   function loadPolicy() {
     $("perr").textContent = ""; $("p-msg").textContent = "";
     return gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH(currentProduct) + "?ref=main")
-      .then(function (f) { policySha = f.sha; fillPolicyForm(JSON.parse(b64decode(f.content))); })
+      .then(function (f) {
+        policySha = f.sha;
+        currentDoc = JSON.parse(b64decode(f.content));
+        fillPolicyForm(PolicyDoc.unwrap(currentDoc));
+      })
       .catch(function (e) { $("perr").textContent = "读取策略失败：" + e.message; });
   }
   $("p-save").onclick = function () {
@@ -425,15 +437,17 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
     var p;
     try { p = policyFromForm(); } catch (e) { $("perr").textContent = e.message; return; }
     $("p-save").disabled = true; $("p-msg").textContent = "写入中…";
+    var next = PolicyDoc.wrap(currentDoc, p, new Date().toISOString().slice(0, 10));
     var body = {
-      message: "站点设置：更新 policy.json",
+      message: "站点设置：更新 " + currentProduct + " 的 policy.json",
       branch: "main",
-      content: b64encode(JSON.stringify(p, null, 2) + "\n"),
+      content: b64encode(JSON.stringify(next, null, 2) + "\n"),
     };
     if (policySha) body.sha = policySha;
     gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH(currentProduct), { method: "PUT", body: body })
       .then(function (r) {
         if (r && r.content && r.content.sha) policySha = r.content.sha;
+        currentDoc = next;
         $("p-msg").textContent = "已写入 main，官网正在自动重新发布。";
       })
       .catch(function (e) {
