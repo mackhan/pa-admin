@@ -4,6 +4,8 @@
 
 ## 做什么
 - **使用统计**：各应用累计设备、7 / 30 日活跃、近 30 天每日活跃柱图、版本 / 系统 / 事件类型分布。只有聚合数字，没有任何安装 id。
+- **月活设备（2026-11-14）**：按北京时间自然月跨天去重，同一台设备当月只算 1 台，不是每日活跃相加（`stats.js::monthlyActive`，`node tests/mau.js` 守护）。
+- **站点设置（2026-11-14）**：强更开关 / 最低版本 / 宽限期 / 中英公告 / 拦截版本，写入 `mackhan/mackhan.github.io` 的 `content/static/policy.json`；push 到 main 后官网 workflow 自动重新发布。需要令牌同时勾上该仓库的 **Contents: Read and write**。
 - **权限管理**：谁能看后台 = 谁对私有数据仓 `mackhan/pa-stats` 有读权限；页面里直接增删协作者（GitHub 协作者邀请）。
 
 ## 为什么安全

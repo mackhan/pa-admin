@@ -84,7 +84,7 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
 <div class="wrap">
   <header>
     <div class="logo">Atelier raIn<small>管理后台</small></div>
-    <nav id="nav" hidden><button data-v="stats" class="on">使用统计</button><button data-v="access">权限管理</button><button id="tokbtn" class="pill" title="点击复制令牌"></button><button id="logout">退出</button></nav>
+    <nav id="nav" hidden><button data-v="stats" class="on">使用统计</button><button data-v="settings">站点设置</button><button data-v="access">权限管理</button><button id="tokbtn" class="pill" title="点击复制令牌"></button><button id="logout">退出</button></nav>
   </header>
 
   <section id="login" class="card login">
@@ -112,13 +112,31 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
       <div class="row"><input id="new-user" placeholder="要授权的 GitHub 用户名"><button class="btn" id="add">授予只读权限</button></div>
       <p class="err" id="aerr"></p></div>
   </section>
+
+  <section id="v-settings" hidden>
+    <h1>站点设置</h1>
+    <p class="lead">改完点保存，直接写入 <code>mackhan/mackhan.github.io</code> 的 main 分支，官网自动重新发布。定价固定免费。</p>
+    <div class="card">
+      <label class="row"><input type="checkbox" id="p-force"> 开启强制升级</label>
+      <div class="row"><input id="p-min" placeholder="最低版本，如 0.4.41"></div>
+      <div class="row"><input id="p-grace" type="number" min="0" max="90" placeholder="宽限期（0–90 天）"></div>
+      <div class="row"><input id="p-block" placeholder="拦截低于此版本（留空不拦截）"></div>
+      <div class="row"><input id="p-zh" placeholder="公告（中文）"></div>
+      <div class="row"><input id="p-en" placeholder="公告（English）"></div>
+      <div class="row"><button class="btn" id="p-save">保存并发布</button><span id="p-msg"></span></div>
+      <p class="err" id="perr"></p>
+      <p class="hint">保存需要令牌同时勾上 <b>mackhan/mackhan.github.io</b> 的 <b>Contents: Read and write</b>；只有 pa-stats 只读权限时会报 403。发布结果可打开 <a href="/policy.json" target="_blank" rel="noopener">/policy.json</a> 核对。</p>
+    </div>
+  </section>
 </div>
 <script src="stats.js"></script>
 <script src="labels.js"></script>
 <script>
 (function () {
   "use strict";
-  var REPO = "mackhan/pa-stats", API = "https://api.github.com";
+  var REPO = "mackhan/pa-stats", SITE_REPO = "mackhan/mackhan.github.io", API = "https://api.github.com";
+  var POLICY_PATH = "content/static/policy.json";
+  var policySha = null, lastEvents = [];
   var $ = function (id) { return document.getElementById(id); };
   $("repo-name").textContent = REPO;
   var token = localStorage.getItem("pa-admin-token") || "";
@@ -254,7 +272,12 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
   function renderStats(agg) {
     $("asof").textContent = "数据截至 " + agg.generated + "（北京时间）· 每次打开实时从数据仓计算 · 只显示聚合数字";
     if (!agg.apps.length) { $("apps").innerHTML = '<div class="card empty">还没有数据。应用启动后一分钟内会上报第一条。</div>'; return; }
-    $("apps").innerHTML = legendCard() + agg.apps.map(function (a) {
+    var mau = Stats.monthlyActive(lastEvents || []);
+    var months = Object.keys(mau).sort().reverse().slice(0, 6);
+    var mauCard = months.length ? '<div class="card"><h3><i></i>月活设备（按北京时间自然月去重）</h3><div class="nums">' +
+      months.map(function (m) { return '<div><b>' + mau[m] + "</b><span>" + m + "</span></div>"; }).join("") +
+      '</div><p class="hint">同一台设备当月出现多次只算 1 台，不是把每日活跃相加。</p></div>' : "";
+    $("apps").innerHTML = mauCard + legendCard() + agg.apps.map(function (a) {
       var peak = Math.max.apply(null, a.daily.map(function (d) { return d[1]; }).concat([1]));
       return '<div class="card"><h3><i></i>' + esc(a.name) + "</h3>" +
         '<div class="nums">' + ["devices", "active7", "active30", "events"].map(function (k) {
@@ -298,10 +321,74 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
     gh("/repos/" + REPO + "/collaborators/" + u, { method: "DELETE" }).then(loadPeople).catch(function (x) { $("aerr").textContent = x.message; });
   };
 
+  function b64decode(s) {
+    var bin = atob(String(s).replace(/\s/g, ""));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  function b64encode(s) { return btoa(unescape(encodeURIComponent(s))); }
+
+  function fillPolicyForm(p) {
+    var f = p.force || {}, n = f.notes || {};
+    $("p-force").checked = !!f.enabled;
+    $("p-min").value = f.minVersion || "";
+    $("p-grace").value = f.graceDays || 0;
+    $("p-zh").value = n.zh || "";
+    $("p-en").value = n.en || "";
+    $("p-block").value = (p.block && p.block.belowVersion) || "";
+  }
+  function policyFromForm() {
+    var grace = Number($("p-grace").value || 0);
+    if (!Number.isInteger(grace) || grace < 0 || grace > 90) throw new Error("宽限期要填 0–90 之间的整数");
+    return {
+      schema: 1,
+      force: {
+        enabled: $("p-force").checked,
+        minVersion: $("p-min").value.trim(),
+        graceDays: grace,
+        notes: { zh: $("p-zh").value.trim(), en: $("p-en").value.trim() },
+      },
+      block: { belowVersion: $("p-block").value.trim() },
+      pricing: { mode: "free", notice: { zh: "", en: "" }, effectiveFrom: "" },
+    };
+  }
+  function loadPolicy() {
+    $("perr").textContent = ""; $("p-msg").textContent = "";
+    return gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH + "?ref=main")
+      .then(function (f) { policySha = f.sha; fillPolicyForm(JSON.parse(b64decode(f.content))); })
+      .catch(function (e) { $("perr").textContent = "读取策略失败：" + e.message; });
+  }
+  $("p-save").onclick = function () {
+    $("perr").textContent = ""; $("p-msg").textContent = "";
+    var p;
+    try { p = policyFromForm(); } catch (e) { $("perr").textContent = e.message; return; }
+    $("p-save").disabled = true; $("p-msg").textContent = "写入中…";
+    var body = {
+      message: "站点设置：更新 policy.json",
+      branch: "main",
+      content: b64encode(JSON.stringify(p, null, 2) + "\n"),
+    };
+    if (policySha) body.sha = policySha;
+    gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH, { method: "PUT", body: body })
+      .then(function (r) {
+        if (r && r.content && r.content.sha) policySha = r.content.sha;
+        $("p-msg").textContent = "已写入 main，官网正在自动重新发布。";
+      })
+      .catch(function (e) {
+        $("p-msg").textContent = "";
+        $("perr").textContent = (e.status === 403 || e.status === 404)
+          ? "令牌没有 mackhan/mackhan.github.io 的 Contents 写权限，请在 GitHub 重新生成 Fine-grained PAT 并勾上这个仓库。"
+          : e.message;
+      })
+      .then(function () { $("p-save").disabled = false; });
+  };
+
   function show(v) {
-    ["stats", "access"].forEach(function (k) { $("v-" + k).hidden = k !== v; });
+    ["stats", "access", "settings"].forEach(function (k) { $("v-" + k).hidden = k !== v; });
     Array.prototype.forEach.call(document.querySelectorAll("#nav [data-v]"), function (b) { b.classList.toggle("on", b.dataset.v === v); });
     if (v === "access") loadPeople();
+    if (v === "settings") loadPolicy();
   }
   $("nav").onclick = function (e) { if (e.target.dataset.v) show(e.target.dataset.v); };
   $("logout").onclick = function () { localStorage.removeItem("pa-admin-token"); location.reload(); };
@@ -325,6 +412,7 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
         $("login").hidden = true;
         $("nav").hidden = false;
         $("tokbtn").textContent = mask(token);
+        lastEvents = es;
         renderStats(Stats.aggregate(es));
         show("stats");
       }).catch(function (e) {

@@ -90,7 +90,21 @@
     return { generated: today, days: days, apps: apps };
   }
 
-  var api = { parseLines: parseLines, aggregate: aggregate, dayOf: dayOf };
+  function monthlyActive(events, app) {
+    var months = {};
+    (events || []).forEach(function (e) {
+      if (!e || (app && e.app !== app)) return;
+      if (/_test$/.test(String(e.kind))) return;
+      if (!e.install_id || e.ts === undefined) return;
+      var m = dayOf(e.ts).slice(0, 7);
+      (months[m] = months[m] || {})[e.install_id] = 1;
+    });
+    var out = {};
+    Object.keys(months).sort().forEach(function (m) { out[m] = Object.keys(months[m]).length; });
+    return out;
+  }
+
+  var api = { parseLines: parseLines, aggregate: aggregate, dayOf: dayOf, monthlyActive: monthlyActive };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Stats = api;
 })(this);
