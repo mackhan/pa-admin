@@ -102,6 +102,9 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
   <section id="v-stats" hidden>
     <h1>使用统计</h1>
     <p class="lead" id="asof"></p>
+    <div class="row" id="app-tabs"></div>
+    <div class="card" id="traffic-card"><h3><i></i>网站访客（仅后台可见）</h3><div id="traffic">读取中…</div>
+      <p class="hint">数据来自 GitHub 仓库流量，近 14 天、按整个仓库统计；公开站点不显示任何统计数字。</p></div>
     <div id="apps"></div>
   </section>
 
@@ -117,6 +120,7 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
     <h1>站点设置</h1>
     <p class="lead">改完点保存，直接写入 <code>mackhan/mackhan.github.io</code> 的 main 分支，官网自动重新发布。定价固定免费。</p>
     <div class="card">
+      <div class="row"><label for="p-product">产品</label><select id="p-product"></select></div>
       <label class="row"><input type="checkbox" id="p-force"> 开启强制升级</label>
       <div class="row"><input id="p-min" placeholder="最低版本，如 0.4.41"></div>
       <div class="row"><input id="p-grace" type="number" min="0" max="90" placeholder="宽限期（0–90 天）"></div>
@@ -135,8 +139,14 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
 (function () {
   "use strict";
   var REPO = "mackhan/pa-stats", SITE_REPO = "mackhan/mackhan.github.io", API = "https://api.github.com";
-  var POLICY_PATH = "content/static/policy.json";
-  var policySha = null, lastEvents = [];
+  var PRODUCTS = [
+    { id: "kvmini", name: "KVMini" }, { id: "snipscribe", name: "SnipScribe" },
+    { id: "moviebox", name: "MovieBox" }, { id: "tupu", name: "图谱 RokidChart" },
+    { id: "idphoto", name: "IDPhoto Studio" }, { id: "lifetree", name: "生命树" },
+    { id: "promptledger", name: "PromptLedger 提示词账本" }
+  ];
+  var POLICY_PATH = function (id) { return "content/static/policy/" + id + ".json"; };
+  var currentProduct = "kvmini", currentApp = null, policySha = null, lastEvents = [];
   var $ = function (id) { return document.getElementById(id); };
   $("repo-name").textContent = REPO;
   var token = localStorage.getItem("pa-admin-token") || "";
@@ -269,15 +279,33 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
       "</div></details>";
   }
 
+  function renderAppTabs(agg) {
+    var box = $("app-tabs");
+    box.innerHTML = "";
+    if (!agg.apps.length) return;
+    var all = document.createElement("button");
+    all.className = "btn"; all.textContent = "全部"; all.disabled = !currentApp;
+    all.onclick = function () { currentApp = null; renderStats(agg); };
+    box.appendChild(all);
+    agg.apps.forEach(function (a) {
+      var b = document.createElement("button");
+      b.className = "btn"; b.textContent = a.name; b.disabled = currentApp === a.name;
+      b.onclick = function () { currentApp = a.name; renderStats(agg); };
+      box.appendChild(b);
+    });
+  }
+
   function renderStats(agg) {
+    renderAppTabs(agg);
     $("asof").textContent = "数据截至 " + agg.generated + "（北京时间）· 每次打开实时从数据仓计算 · 只显示聚合数字";
     if (!agg.apps.length) { $("apps").innerHTML = '<div class="card empty">还没有数据。应用启动后一分钟内会上报第一条。</div>'; return; }
-    var mau = Stats.monthlyActive(lastEvents || []);
+    var shown = currentApp ? agg.apps.filter(function (a) { return a.name === currentApp; }) : agg.apps;
+    var mau = Stats.monthlyActive(lastEvents || [], currentApp || undefined);
     var months = Object.keys(mau).sort().reverse().slice(0, 6);
     var mauCard = months.length ? '<div class="card"><h3><i></i>月活设备（按北京时间自然月去重）</h3><div class="nums">' +
       months.map(function (m) { return '<div><b>' + mau[m] + "</b><span>" + m + "</span></div>"; }).join("") +
       '</div><p class="hint">同一台设备当月出现多次只算 1 台，不是把每日活跃相加。</p></div>' : "";
-    $("apps").innerHTML = mauCard + legendCard() + agg.apps.map(function (a) {
+    $("apps").innerHTML = mauCard + legendCard() + shown.map(function (a) {
       var peak = Math.max.apply(null, a.daily.map(function (d) { return d[1]; }).concat([1]));
       return '<div class="card"><h3><i></i>' + esc(a.name) + "</h3>" +
         '<div class="nums">' + ["devices", "active7", "active30", "events"].map(function (k) {
@@ -353,9 +381,42 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
       pricing: { mode: "free", notice: { zh: "", en: "" }, effectiveFrom: "" },
     };
   }
+  function renderProductSelect() {
+    var sel = $("p-product");
+    if (sel.options.length) return;
+    PRODUCTS.forEach(function (p) {
+      var o = document.createElement("option");
+      o.value = p.id; o.textContent = p.name;
+      sel.appendChild(o);
+    });
+    sel.value = currentProduct;
+  }
+  $("p-product").onchange = function () {
+    currentProduct = this.value;
+    policySha = null;
+    loadPolicy();
+  };
+
+  function loadTraffic() {
+    var box = $("traffic");
+    box.textContent = "读取中…";
+    return gh("/repos/" + SITE_REPO + "/traffic/views")
+      .then(function (d) {
+        var rows = (d.views || []).slice(-14);
+        box.innerHTML = "<p>近 14 天浏览 <b>" + (d.count || 0) + "</b> 次、独立访客 <b>" + (d.uniques || 0) +
+          "</b> 人。公开站点不展示任何统计数字。</p>" +
+          (rows.length ? '<p class="hint">' + rows.map(function (r) {
+            return r.timestamp.slice(0, 10) + " " + r.count + "/" + r.uniques;
+          }).join(" · ") + "</p>" : "");
+      })
+      .catch(function (e) {
+        box.textContent = "读不到仓库流量（" + e.message + "）：需要令牌有 " + SITE_REPO + " 的读权限。";
+      });
+  }
+
   function loadPolicy() {
     $("perr").textContent = ""; $("p-msg").textContent = "";
-    return gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH + "?ref=main")
+    return gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH(currentProduct) + "?ref=main")
       .then(function (f) { policySha = f.sha; fillPolicyForm(JSON.parse(b64decode(f.content))); })
       .catch(function (e) { $("perr").textContent = "读取策略失败：" + e.message; });
   }
@@ -370,7 +431,7 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
       content: b64encode(JSON.stringify(p, null, 2) + "\n"),
     };
     if (policySha) body.sha = policySha;
-    gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH, { method: "PUT", body: body })
+    gh("/repos/" + SITE_REPO + "/contents/" + POLICY_PATH(currentProduct), { method: "PUT", body: body })
       .then(function (r) {
         if (r && r.content && r.content.sha) policySha = r.content.sha;
         $("p-msg").textContent = "已写入 main，官网正在自动重新发布。";
@@ -388,7 +449,8 @@ th { color: var(--dim); font-weight: 500; font-size: 12px; }
     ["stats", "access", "settings"].forEach(function (k) { $("v-" + k).hidden = k !== v; });
     Array.prototype.forEach.call(document.querySelectorAll("#nav [data-v]"), function (b) { b.classList.toggle("on", b.dataset.v === v); });
     if (v === "access") loadPeople();
-    if (v === "settings") loadPolicy();
+    if (v === "settings") { renderProductSelect(); loadPolicy(); }
+    if (v === "stats") loadTraffic();
   }
   $("nav").onclick = function (e) { if (e.target.dataset.v) show(e.target.dataset.v); };
   $("logout").onclick = function () { localStorage.removeItem("pa-admin-token"); location.reload(); };
